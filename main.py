@@ -52,6 +52,25 @@ def health_check():
     return {"status": "ok", "service": "pimberly-python-scripts"}
 
 
+@app.post("/debug/pimberly-webhook")
+async def debug_pimberly_webhook(request: Request):
+    headers = dict(request.headers)
+    body = await request.body()
+
+    print("---- INCOMING WEBHOOK DEBUG ----")
+    print("Headers:")
+    print(headers)
+    print("Raw body:")
+    print(body.decode("utf-8"))
+    print("--------------------------------")
+
+    return {
+        "status": "received",
+        "headers": headers,
+        "rawBody": body.decode("utf-8"),
+    }
+
+
 @app.post("/pimberly/run-script")
 async def run_script(
     request: Request,
@@ -88,12 +107,14 @@ async def run_script(
     # Once happy, set dryRun to false in the incoming payload.
     dry_run = payload.get("dryRun", True)
 
+    pimberly_writeback_result = None
+
     if not dry_run:
-        writeback_to_pimberly(
+        pimberly_writeback_result = writeback_to_pimberly(
             product_id=product_id,
             field_name=field_name,
             new_value=new_value,
-        )
+    )
 
     return {
         "status": "success",
@@ -103,6 +124,7 @@ async def run_script(
         "script": script_name,
         "oldValue": current_value,
         "newValue": new_value,
+        "pimberlyWriteback": pimberly_writeback_result,
     }
 
 
@@ -113,19 +135,34 @@ def writeback_to_pimberly(product_id: str, field_name: str, new_value: Any):
     if not PIMBERLY_API_BASE_URL:
         raise HTTPException(status_code=500, detail="PIMBERLY_API_BASE_URL is not configured")
 
-    url = f"{PIMBERLY_API_BASE_URL}/products/{product_id}"
+    url = f"{PIMBERLY_API_BASE_URL}/core/products/{product_id}"
 
-    response = requests.patch(
+    payload = {
+        field_name: new_value,
+        "whTriggerScript":""
+    }
+
+    print("---- PIMBERLY WRITEBACK DEBUG ----")
+    print(f"URL: {url}")
+    print(f"Field: {field_name}")
+    print(f"New value: {new_value}")
+    print(f"Payload: {payload}")
+    print("----------------------------------")
+
+    response = requests.put(
         url,
         headers={
-            "Authorization": f"Bearer {PIMBERLY_API_KEY}",
+            "Authorization": f"{PIMBERLY_API_KEY}",
             "Content-Type": "application/json",
         },
-        json={
-            field_name: new_value
-        },
+        json=payload,
         timeout=20,
     )
+
+    print("---- PIMBERLY RESPONSE DEBUG ----")
+    print(f"Status code: {response.status_code}")
+    print(f"Response text: {response.text}")
+    print("---------------------------------")
 
     if response.status_code >= 400:
         raise HTTPException(
@@ -136,3 +173,8 @@ def writeback_to_pimberly(product_id: str, field_name: str, new_value: Any):
                 "response": response.text,
             },
         )
+
+    return {
+        "statusCode": response.status_code,
+        "response": response.text,
+    }
