@@ -51,6 +51,21 @@ SCRIPT_REGISTRY: dict[str, Callable[[Any], Any]] = {
 def health_check():
     return {"status": "ok", "service": "pimberly-python-scripts"}
 
+@app.post("/pimberly/release")
+async def debug_release(request: Request):
+    headers = dict(request.headers)
+    body = await request.body()
+
+    print("---- INCOMING RELEASE WH ----")
+    print("Raw body:")
+    print(body.decode("utf-8"))
+    print("--------------------------------")
+
+    return {
+        "status": "received",
+        "headers": headers,
+        "rawBody": body.decode("utf-8"),
+    }
 
 @app.post("/debug/pimberly-webhook")
 async def debug_pimberly_webhook(request: Request):
